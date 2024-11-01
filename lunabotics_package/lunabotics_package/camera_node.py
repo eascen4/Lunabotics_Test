@@ -22,13 +22,19 @@ class CameraNode(Node):
         self.range_min = 0.1
         self.range_max = 10.0
 
-        self.timer = self.create_timer(0.1, self.camera_callback)
+        try:
+            self.pipeline = rs.pipeline()
+            config = rs.config()
+            config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
+            config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
 
-        self.pipeline = rs.pipeline()
-        config = rs.config()
-        config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
-        config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
-        self.pipeline.start()
+            self.pipeline.start()
+
+            self.timer = self.create_timer(0.1, self.camera_callback )
+            self.get_logger().info( "INTEL REALSENSE CONNECTED!" )
+        except Exception as e:
+            self.get_logger().error(f"{e}")
+
     
     def camera_callback(self):
         pass
