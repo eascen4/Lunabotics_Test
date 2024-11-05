@@ -28,16 +28,25 @@ class CameraNode(Node):
             config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
             config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
 
-            self.pipeline.start()
+            self.pipeline.start(config)
 
-            self.timer = self.create_timer(0.1, self.camera_callback )
+            self.timer = self.create_timer(0.1, self.camera_callback)
             self.get_logger().info( "INTEL REALSENSE CONNECTED!" )
         except Exception as e:
             self.get_logger().error(f"{e}")
 
     
     def camera_callback(self):
-        pass
+        frames = self.pipeline.wait_for_frames()
+        color_frame = frames.get_color_frame()
+        depth_frame = frames.get_depth_frame()
+        if not color_frame or not depth_frame:
+            return
+        
+
+        message = LaserScan()
+        message.scan_time = 1/30 # 30Hz (time between scans)
+        print(f"{depth_frame}")
 
 
     def stop_pipeline(self):
