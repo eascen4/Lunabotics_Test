@@ -64,10 +64,10 @@ class CameraNode(Node):
 
 
 
-        
+
         message.intensities = [] # TODO: Find method to get intensity data if needed
 
-        print(f"width: {depth_frame.get_width()}, height: {depth_frame.get_height()}")
+        print(f"width: {depth_frame.get_width()}, height: {depth_frame.get_height()}, Accessing through method (m): {depth_frame.get_distance(1,1)}, As array: {depth_frame[1][1]}")
 
 
     def stop_pipeline(self):
