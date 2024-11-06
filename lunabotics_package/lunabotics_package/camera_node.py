@@ -40,11 +40,13 @@ class CameraNode(Node):
     
     def camera_callback(self):
         frames = self.pipeline.wait_for_frames()
+
         color_frame = frames.get_color_frame()
         depth_frame = frames.get_depth_frame()
         if not color_frame or not depth_frame:
             return
 
+        depth_data = np.asanyarray(depth_frame.get_data())
         
 
         message = LaserScan()
@@ -55,21 +57,24 @@ class CameraNode(Node):
         message.header.stamp = self.get_clock().now().to_msg()
 
         # Set LaserScan message parameters
-        message.angle_min = math.pi / 4 # TODO: make non-hardcoded
-        message.angle_max = -math.pi / 4 # TODO: make non-hardcoded
+        message.angle_min = -math.pi / 4 # TODO: make non-hardcoded
+        message.angle_max = math.pi / 4 # TODO: make non-hardcoded
         message.angle_increment = (math.pi / 2) / depth_frame.get_width() # The D455 has a horizontal FOV of 90 degrees
 
         message.time_increment = 0.0 # D455 takes all scans at once
         message.scan_time = 1/30 # 30Hz (time between scans)
 
-
-        depth_data = np.asanyarray(depth_frame.get_data())
-
-
+        message.range_min = 0.3 # in meters
+        message.range_max = 5.0  # in meters
+        message.ranges = []
+        for i in range(depth_data.shape[1]):
+            distance = depth_frame.get_distance(i, depth_data.shape[0] // 2)
+            message.ranges.append(distance)
 
         message.intensities = [] # TODO: Find method to get intensity data if needed
 
-        print(f"width: {depth_frame.get_width()}, height: {depth_frame.get_height()}, Accessing through method (m): {depth_data}")
+        self.scan_publisher.publish(message)
+        print(f"width: {depth_frame.get_width()}, height: {depth_frame.get_height()}, Accessing through method (m): {message.ranges}")
 
 
     def stop_pipeline(self):
