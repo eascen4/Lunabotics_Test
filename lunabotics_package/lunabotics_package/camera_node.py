@@ -3,8 +3,10 @@ import rclpy
 from rclpy.node import Node
 
 from sensor_msgs.msg import Image, LaserScan
+from std_msgs.msg import Header
 
 import pyrealsense2 as rs
+import math
 
 class CameraNode(Node):
 
@@ -27,7 +29,6 @@ class CameraNode(Node):
             config = rs.config()
             config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
             config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
-
             self.pipeline.start(config)
 
             self.timer = self.create_timer(0.1, self.camera_callback)
@@ -42,11 +43,31 @@ class CameraNode(Node):
         depth_frame = frames.get_depth_frame()
         if not color_frame or not depth_frame:
             return
+
         
 
         message = LaserScan()
+
+        # Create Header for message
+        message.header = Header()
+        message.header.frame_id = "laser_scan"
+        message.header.stamp = self.get_clock().now().to_msg()
+
+        # Set LaserScan message parameters
+        message.angle_min = math.pi / 4 # TODO: make non-hardcoded
+        message.angle_max = -math.pi / 4 # TODO: make non-hardcoded
+        message.angle_increment = (math.pi / 2) / depth_frame.get_width() # The D455 has a horizontal FOV of 90 degrees
+
+        message.time_increment = 0 # D455 takes all scans at once
         message.scan_time = 1/30 # 30Hz (time between scans)
-        print(f"{depth_frame}")
+
+
+
+
+        
+        message.intensities = [] # TODO: Find method to get intensity data if needed
+
+        print(f"width: {depth_frame.get_width()}, height: {depth_frame.get_height()}")
 
 
     def stop_pipeline(self):
