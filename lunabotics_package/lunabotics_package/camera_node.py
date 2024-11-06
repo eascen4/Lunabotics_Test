@@ -6,6 +6,7 @@ from sensor_msgs.msg import Image, LaserScan
 from std_msgs.msg import Header
 
 import pyrealsense2 as rs
+import numpy as np
 import math
 
 class CameraNode(Node):
@@ -58,16 +59,17 @@ class CameraNode(Node):
         message.angle_max = -math.pi / 4 # TODO: make non-hardcoded
         message.angle_increment = (math.pi / 2) / depth_frame.get_width() # The D455 has a horizontal FOV of 90 degrees
 
-        message.time_increment = 0 # D455 takes all scans at once
+        message.time_increment = 0.0 # D455 takes all scans at once
         message.scan_time = 1/30 # 30Hz (time between scans)
 
 
+        depth_data = np.asanyarray(depth_frame.get_data())
 
 
 
         message.intensities = [] # TODO: Find method to get intensity data if needed
 
-        print(f"width: {depth_frame.get_width()}, height: {depth_frame.get_height()}, Accessing through method (m): {depth_frame.get_distance(1,1)}, As array: {depth_frame[1][1]}")
+        print(f"width: {depth_frame.get_width()}, height: {depth_frame.get_height()}, Accessing through method (m): {depth_data}")
 
 
     def stop_pipeline(self):
