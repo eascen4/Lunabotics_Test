@@ -28,8 +28,9 @@ class CameraNode(Node):
         try:
             self.pipeline = rs.pipeline()
             config = rs.config()
-            config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
-            config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
+            config.enable_stream(rs.stream.color, rs.format.bgr8, 30)
+            config.enable_stream(rs.stream.depth, rs.format.z16, 30)
+            config.enable_stream(rs.stream.gyro)
             self.pipeline.start(config)
 
             self.timer = self.create_timer(0.1, self.camera_callback)
@@ -43,6 +44,7 @@ class CameraNode(Node):
 
         color_frame = frames.get_color_frame()
         depth_frame = frames.get_depth_frame()
+
         if not color_frame or not depth_frame:
             return
 
