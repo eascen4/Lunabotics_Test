@@ -14,28 +14,32 @@ class CameraNode(Node):
     def __init__(self):
         super().__init__('camera_node')
         self.get_logger().info('Camera Node Started')
-
-        self.image_publisher = self.create_publisher(Image, 'camera/color/image_raw', 10)
-        self.depth_publisher = self.create_publisher(Image, 'camera/depth/image_rect_raw', 10)
-        self.scan_publisher = self.create_publisher(LaserScan, '/scan', 10)
+        self.msg_count = 0
+        self.camera_width = 640
+        self.camera_height = 480
 
         self.angle_min = -0.5
         self.angle_max = 0.5
-        self.angle_increment = (self.angle_max - self.angle_min) / 640
+        self.angle_increment = (self.angle_max - self.angle_min) / self.camera_width
         self.range_min = 0.1
         self.range_max = 10.0
 
         try:
             self.pipeline = rs.pipeline()
             config = rs.config()
-            config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
-            config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
+            config.enable_stream(rs.stream.color, self.camera_width, self.camera_height, rs.format.bgr8, 30)
+            config.enable_stream(rs.stream.depth, self.camera_width, self.camera_height, rs.format.z16, 30)
+            config.enable_stream(rs.stream.gyro)
             self.pipeline.start(config)
 
             self.timer = self.create_timer(0.1, self.camera_callback)
             self.get_logger().info( "INTEL REALSENSE CONNECTED!" )
         except Exception as e:
             self.get_logger().error(f"{e}")
+
+        self.image_publisher = self.create_publisher(Image, 'camera/color/image_raw', 10)
+        self.depth_publisher = self.create_publisher(Image, 'camera/depth/image_rect_raw', 10)
+        self.scan_publisher = self.create_publisher(LaserScan, '/scan', 10)
 
     
     def camera_callback(self):
@@ -48,6 +52,7 @@ class CameraNode(Node):
             return
 
         depth_data = np.asanyarray(depth_frame.get_data())
+        gyro_data = frames[2].as_motion_frame().get_motion_data()
         
 
         message = LaserScan()
@@ -75,7 +80,8 @@ class CameraNode(Node):
         message.intensities = [] # TODO: Find method to get intensity data if needed
 
         self.scan_publisher.publish(message)
-        print(f"width: {depth_frame.get_width()}, height: {depth_frame.get_height()}, Accessing through method (m): {message.ranges}")
+        self.msg_count += 1
+        self.get_logger().info(f"LaserScan message #{self.msg_count} published at angle {gyro_data}")
 
 
     def stop_pipeline(self):
