@@ -52,7 +52,7 @@ class CameraNode(Node):
 
         depth_data = np.asanyarray(depth_frame.get_data())
         gyro_data = gyro_frame.as_motion_frame().get_motion_data()
-        angle = gyro_data.y
+        angle = gyro_data.y * math.pi * 2
 
         message = LaserScan()
 
