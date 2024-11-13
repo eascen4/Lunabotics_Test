@@ -26,7 +26,9 @@ class CameraNode(Node):
             config = rs.config()
             config.enable_stream(rs.stream.color, self.camera_width, self.camera_height, rs.format.bgr8, 30)
             config.enable_stream(rs.stream.depth, self.camera_width, self.camera_height, rs.format.z16, 30)
+            print("Hello")
             config.enable_stream(rs.stream.pose)
+            print("Hi")
             self.pipeline.start(config)
 
             self.timer = self.create_timer(0.1, self.camera_callback)
@@ -75,7 +77,7 @@ class CameraNode(Node):
 
         message.range_min = 0.3 # in meters
         message.range_max = 5.0  # in meters
-        
+
         message.ranges = []
         for i in range(depth_data.shape[1]):
             distance = depth_frame.get_distance(i, depth_data.shape[0] // 2)
