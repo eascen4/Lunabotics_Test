@@ -30,6 +30,7 @@ class CameraNode(Node):
             config.enable_stream(rs.stream.pose)
             print("Hi")
             self.pipeline.start(config)
+            print(f"Pipeline started: ", config )
 
             self.timer = self.create_timer(0.1, self.camera_callback)
             self.get_logger().info( "INTEL REALSENSE CONNECTED!" )
