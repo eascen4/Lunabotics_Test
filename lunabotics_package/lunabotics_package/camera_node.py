@@ -26,7 +26,7 @@ class CameraNode(Node):
             config = rs.config()
             config.enable_stream(rs.stream.color, self.camera_width, self.camera_height, rs.format.bgr8, 30)
             config.enable_stream(rs.stream.depth, self.camera_width, self.camera_height, rs.format.z16, 30)
-            config.enable_stream(rs.stream.gyro)
+            config.enable_stream(rs.stream.pose)
             self.pipeline.start(config)
 
             self.timer = self.create_timer(0.1, self.camera_callback)
@@ -36,7 +36,7 @@ class CameraNode(Node):
 
         self.image_publisher = self.create_publisher(Image, 'camera/color/image_raw', 10)
         self.depth_publisher = self.create_publisher(Image, 'camera/depth/image_rect_raw', 10)
-        self.scan_publisher = self.create_publisher(LaserScan, '/scan', 10)
+        self.scan_publisher = self.create_publisher(LaserScan, 'camera/scan', 10)
 
     
     def camera_callback(self):
@@ -44,15 +44,19 @@ class CameraNode(Node):
 
         color_frame = frames.get_color_frame()
         depth_frame = frames.get_depth_frame()
-        gyro_frame = frames.first_or_default(rs.stream.gyro)
+        pose_frame = frames.get_pose_frame()
 
         if not color_frame or not depth_frame:
             self.get_logger().warning("Frames not received")
             return
 
+        pose_data = pose_frame.get_pose_data()
         depth_data = np.asanyarray(depth_frame.get_data())
-        gyro_data = gyro_frame.as_motion_frame().get_motion_data()
-        angle = gyro_data.y * math.pi * 2
+
+        angle = self.get_angle(pose_data.rotation.w, 
+                               pose_data.rotation.x, 
+                               pose_data.rotation.y, 
+                               pose_data.rotation.z)
 
         message = LaserScan()
 
@@ -71,6 +75,7 @@ class CameraNode(Node):
 
         message.range_min = 0.3 # in meters
         message.range_max = 5.0  # in meters
+        
         message.ranges = []
         for i in range(depth_data.shape[1]):
             distance = depth_frame.get_distance(i, depth_data.shape[0] // 2)
@@ -81,6 +86,11 @@ class CameraNode(Node):
         self.scan_publisher.publish(message)
         self.msg_count += 1
         self.get_logger().info(f"LaserScan message #{self.msg_count} published at angle {angle}")
+
+    def get_angle(self, w, x, y, z):
+        siny_cosp = 2 * (w * z + x * y)
+        cosy_cosp = 1 - 2 * (y * y + z * z)
+        return math.atan2(siny_cosp, cosy_cosp)
 
 
     def stop_pipeline(self):
