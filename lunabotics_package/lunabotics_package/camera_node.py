@@ -2,7 +2,7 @@
 import rclpy
 from rclpy.node import Node
 
-from sensor_msgs.msg import Image, LaserScan
+from sensor_msgs.msg import Image, LaserScan, PointCloud2
 from std_msgs.msg import Header
 
 import pyrealsense2 as rs
@@ -26,17 +26,16 @@ class CameraNode(Node):
             config = rs.config()
             config.enable_stream(rs.stream.color, self.camera_width, self.camera_height, rs.format.bgr8, 30)
             config.enable_stream(rs.stream.depth, self.camera_width, self.camera_height, rs.format.z16, 30)
-            config.enable_stream(rs.stream.gyro)
             self.pipeline.start(config)
 
-            self.timer = self.create_timer(0.1, self.camera_callback)
             self.get_logger().info( "INTEL REALSENSE CONNECTED!" )
         except Exception as e:
             self.get_logger().error(f"{e}")
 
-        self.image_publisher = self.create_publisher(Image, 'camera/color/image_raw', 10)
-        self.depth_publisher = self.create_publisher(Image, 'camera/depth/image_rect_raw', 10)
-        self.scan_publisher = self.create_publisher(LaserScan, 'camera/scan', 10)
+        self.image_publisher = self.create_publisher(Image, 'D455/color/image_raw', 10)
+        self.scan_publisher = self.create_publisher(LaserScan, 'D455/scan', 10)
+
+        self.timer = self.create_timer(0.1, self.camera_callback)
 
     
     def camera_callback(self):
@@ -44,51 +43,69 @@ class CameraNode(Node):
 
         color_frame = frames.get_color_frame()
         depth_frame = frames.get_depth_frame()
-        gyro_frame = frames.first_or_default(rs.stream.gyro)
 
-        if not color_frame or not depth_frame or not gyro_frame:
+        if not color_frame or not depth_frame:
             self.get_logger().warning("Frames not received")
             return
 
-        gyro_data = gyro_frame.as_motion_frame().get_motion_data()
-        self.update_angle(gyro_data)
-
         depth_data = np.asanyarray(depth_frame.get_data())
+        color_data = np.asanyarray(color_frame.get_data())
 
+        laserscan_message = LaserScan()
 
-        message = LaserScan()
-
-        # Create Header for message
-        message.header = Header()
-        message.header.frame_id = "laser_scan"
-        message.header.stamp = self.get_clock().now().to_msg()
+        # Create Header for Laserscan message
+        laserscan_message.header = Header()
+        laserscan_message.header.frame_id = "laser_scan" #TODO: Change to whatever frame id is needed
+        laserscan_message.header.stamp = self.get_clock().now().to_msg()
 
         # Set LaserScan message parameters
-        message.angle_min = -self.depth_horizontal_fov / 2 + self.angle 
-        message.angle_max = self.depth_horizontal_fov / 2 + self.angle 
-        message.angle_increment = self.depth_horizontal_fov / self.camera_width # The D455 has a horizontal FOV of 90 degrees
+        laserscan_message.angle_min = -self.depth_horizontal_fov / 2 # TODO: Make not hardcoded
+        laserscan_message.angle_max = self.depth_horizontal_fov / 2  # TODO: Make not hardcoded
+        laserscan_message.angle_increment = self.depth_horizontal_fov / self.camera_width # The D455 has a depth horizontal FOV of 90 degrees
 
-        message.time_increment = 0.0 # D455 takes all scans at once
-        message.scan_time = 1/30 # 30Hz (time between scans)
+        laserscan_message.time_increment = 0.0 # D455 takes all scans at once
+        laserscan_message.scan_time = 1/30 # 30Hz (time between scans)
 
-        message.range_min = 0.3 # in meters
-        message.range_max = 5.0  # in meters
+        laserscan_message.range_min = 0.3 # in meters
+        laserscan_message.range_max = 5.0  # in meters
 
-        message.ranges = []
+        laserscan_message.ranges = []
         for i in range(depth_data.shape[1]):
             distance = depth_frame.get_distance(i, depth_data.shape[0] // 2)
-            message.ranges.append(distance)
+            laserscan_message.ranges.append(distance)
 
-        message.intensities = [] # TODO: Find method to get intensity data if needed
+        laserscan_message.intensities = [] # TODO: Find method to get intensity data if needed
 
-        self.scan_publisher.publish(message)
+        # Publish LaserScan message
+        self.scan_publisher.publish(laserscan_message)
+
+        pointcloud_message = PointCloud2()
+
+        self.publish_image(color_data)
+        
         self.msg_count += 1
-        self.get_logger().info(f"LaserScan message #{self.msg_count} published at angle {self.angle:.2fe}")
+        
+        self.get_logger().info(f"Camera Realsense D455 has published {self.msg_count} times")
 
-    def update_angle(self, gyro_data):
-        dt = 0.1
-        self.angle += gyro_data.y * dt
-        self.angle = (self.angle + math.pi) % (2 * math.pi) - math.pi
+    def publish_image(self, color_data):
+        img_message = Image()
+
+        # Create Header for Image message
+        img_message.header = Header()
+        img_message.header.stamp = self.get_clock().now().to_msg()
+        img_message.header.frame_id = "color_frame" #TODO: Change to whatever frame id is needed
+
+        # Set Image message parameters
+        img_message.height = color_data.shape[0]
+        img_message.width = color_data.shape[1]
+        img_message.encoding = 'bgr8'
+        img_message.is_bigendian = False
+        img_message.step = color_data.shape[1] * color_data.shape[2]
+        print(f"color_data.shape[1]: {color_data.shape[1]}, color_data.shape[2]: {color_data.shape[2]}") #TODO: Remove
+        img_message.data = color_data.tobytes()
+
+        self.image_publisher.publish(img_message)
+
 
     def stop_pipeline(self):
         self.pipeline.stop()
