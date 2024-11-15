@@ -2,13 +2,13 @@
 import rclpy
 from rclpy.node import Node
 
-from sensor_msgs.msg import Image, LaserScan, PointCloud2
+from sensor_msgs.msg import Image, LaserScan, PointCloud2, PointField
 from std_msgs.msg import Header
 
 import pyrealsense2 as rs
 import numpy as np
 import math
-
+import struct
 class CameraNode(Node):
 
     def __init__(self):
@@ -33,11 +33,11 @@ class CameraNode(Node):
             self.get_logger().error(f"{e}")
 
         self.image_publisher = self.create_publisher(Image, 'D455/color/image_raw', 10)
+        self.pointcloud_publisher = self.create_publisher(PointCloud2, 'D455/pointcloud', 10)
         self.scan_publisher = self.create_publisher(LaserScan, 'D455/scan', 10)
 
         self.timer = self.create_timer(0.1, self.camera_callback)
 
-    
     def camera_callback(self):
         frames = self.pipeline.wait_for_frames()
 
@@ -79,7 +79,44 @@ class CameraNode(Node):
         # Publish LaserScan message
         self.scan_publisher.publish(laserscan_message)
 
+        intrinsics: rs.intrinsics = depth_frame.profile.as_video_stream_profile().intrinsics
+
         pointcloud_message = PointCloud2()
+
+        pointcloud_message.header = Header()
+        pointcloud_message.header.frame_id = "camera_link" # TODO: Change to whatever frame id is needed
+        pointcloud_message.header.stamp = self.get_clock().now().to_msg()
+
+        pointcloud_message.height = self.camera_height
+        pointcloud_message.width = self.camera_width
+        pointcloud_message.is_dense = False
+        pointcloud_message.is_bigendian = False
+
+        pointcloud_message.fields = [
+            PointField(name="x", offset=0, datatype=PointField.FLOAT32, count=1),
+            PointField(name="y", offset=4, datatype=PointField.FLOAT32, count=1),
+            PointField(name="z", offset=8, datatype=PointField.FLOAT32, count=1),
+            PointField(name="rgb", offset=12, datatype=PointField.UINT32, count=1)
+            ]
+
+        pointcloud_message.point_step = 16
+        pointcloud_message.row_step = pointcloud_message.point_step * self.camera_width
+
+        pointcloud_data = []
+
+        for y in range(self.camera_height):
+            for x in range(self.camera_width):
+                depth = depth_frame.get_distance(x, y)
+                if 0.3 < depth < 5.0:
+                    point = rs.rs2_deproject_pixel_to_point(intrinsics, [x, y], depth)
+                    r, g, b = color_frame.get_data()[y, x]
+                    rgb = struct.unpack('I', struct.pack('BBB', b, g, r))[0]
+                    pointcloud_data.append((*point, rgb))
+                else:
+                    pointcloud_data.append((float('nan'), float('nan'), float('nan'), 0))
+
+        pointcloud_message.data = np.array(pointcloud_data, dtype=np.float32).tobytes()
+        self.pointcloud_publisher.publish(pointcloud_message)
 
         self.publish_image(color_data)
         
@@ -87,7 +124,7 @@ class CameraNode(Node):
         
         self.get_logger().info(f"Camera Realsense D455 has published {self.msg_count} times")
 
-    def publish_image(self, color_data):
+    def publish_image(self, color_data: List[List[List[int]]]):
         img_message = Image()
 
         # Create Header for Image message
@@ -101,7 +138,6 @@ class CameraNode(Node):
         img_message.encoding = 'bgr8'
         img_message.is_bigendian = False
         img_message.step = color_data.shape[1] * color_data.shape[2]
-        print(f"color_data.shape[1]: {color_data.shape[1]}, color_data.shape[2]: {color_data.shape[2]}") #TODO: Remove
         img_message.data = color_data.tobytes()
 
         self.image_publisher.publish(img_message)
